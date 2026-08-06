@@ -22,6 +22,7 @@ interface GlassInputProps extends TextInputProps {
   label?: string;
   error?: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  tone?: 'default' | 'startup';
 }
 
 export function GlassInput({
@@ -29,6 +30,7 @@ export function GlassInput({
   error,
   icon,
   secureTextEntry,
+  tone = 'default',
   ...props
 }: GlassInputProps) {
   const [focused, setFocused] = useState(false);
@@ -53,17 +55,20 @@ export function GlassInput({
     }).start();
   };
 
+  const accentColor = tone === 'startup' ? Colors.startup.tealBright : Colors.accent.primary;
+  const idleBorderColor = tone === 'startup' ? Colors.startup.border : Colors.border.subtle;
   const borderColor = borderColorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [Colors.border.subtle, Colors.accent.primary],
+    outputRange: [idleBorderColor, accentColor],
   });
 
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, tone === 'startup' && styles.startupLabel]}>{label}</Text>}
       <Animated.View
         style={[
           styles.inputWrapper,
+          tone === 'startup' && styles.startupInputWrapper,
           { borderColor },
           error && styles.errorBorder,
         ]}
@@ -72,7 +77,7 @@ export function GlassInput({
           <Ionicons
             name={icon}
             size={20}
-            color={focused ? Colors.accent.primary : Colors.text.tertiary}
+            color={focused ? accentColor : tone === 'startup' ? Colors.startup.quiet : Colors.text.tertiary}
             style={styles.icon}
           />
         )}
@@ -81,16 +86,16 @@ export function GlassInput({
           secureTextEntry={secureTextEntry && !showPassword}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          style={styles.input}
-          placeholderTextColor={Colors.text.tertiary}
-          cursorColor={Colors.accent.primary}
+          style={[styles.input, tone === 'startup' && styles.startupInput]}
+          placeholderTextColor={tone === 'startup' ? Colors.startup.quiet : Colors.text.tertiary}
+          cursorColor={accentColor}
         />
         {secureTextEntry && (
           <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
               size={20}
-              color={Colors.text.tertiary}
+              color={tone === 'startup' ? Colors.startup.quiet : Colors.text.tertiary}
             />
           </Pressable>
         )}
@@ -109,6 +114,7 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     marginBottom: Spacing.sm,
   },
+  startupLabel: { color: Colors.startup.muted },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -119,6 +125,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     minHeight: 52,
   },
+  startupInputWrapper: { backgroundColor: Colors.startup.surface },
   errorBorder: {
     borderColor: Colors.status.error,
   },
@@ -131,6 +138,7 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     paddingVertical: Spacing.md,
   },
+  startupInput: { color: Colors.startup.text },
   eyeBtn: {
     padding: Spacing.xs,
   },

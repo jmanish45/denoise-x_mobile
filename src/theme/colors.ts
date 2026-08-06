@@ -92,6 +92,26 @@ export const Colors = {
   overlay: 'rgba(0, 0, 0, 0.6)',
   overlayLight: 'rgba(0, 0, 0, 0.4)',
 
+  // ── Startup / auth surfaces ──────────────────────────────────────
+  // Restrained black glass with a single clinical teal accent. Kept
+  // separate from the dashboard tokens so the authenticated experience
+  // can retain its reference-matched blue depth and contrast.
+  startup: {
+    bg: '#050908',
+    bgRaised: '#09110F',
+    surface: 'rgba(16, 27, 26, 0.78)',
+    surfaceStrong: 'rgba(21, 35, 33, 0.92)',
+    border: 'rgba(190, 255, 234, 0.14)',
+    borderStrong: 'rgba(92, 230, 195, 0.38)',
+    teal: '#29D3AF',
+    tealBright: '#72F3D2',
+    tealDim: 'rgba(41, 211, 175, 0.12)',
+    cyanDim: 'rgba(114, 243, 210, 0.08)',
+    text: '#F2F7F5',
+    muted: '#A1B2AD',
+    quiet: '#65746F',
+  },
+
   // ── Tab bar ───────────────────────────────────────────────────────
   tabBar: {
     bg: 'rgba(6, 10, 20, 0.85)',

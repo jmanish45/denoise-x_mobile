@@ -1,26 +1,23 @@
 /**
- * BottomTabBar.tsx — Premium Floating Dock Navigation
- * =====================================================
- * Cinematic glassmorphic floating bar matching the reference:
- * elevated center button with sparkle icon, active pill states.
+ * Floating five-destination navigation dock used by the tab navigator.
+ * The center Denoise-X action intentionally rises above the glass surface.
  */
 
-import React, { useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, Animated, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Spacing, BorderRadius, Typography } from '../theme';
-import { createPulseLoop } from '../theme/animations';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+import { hapticImpact } from '../services/preferences';
+import { BorderRadius, Colors, Typography } from '../theme';
+import { createPulseLoop } from '../theme/animations';
 
 interface TabItem {
   name: string;
   label: string;
-  icon: string;
-  iconFocused: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconFocused: keyof typeof Ionicons.glyphMap;
   isCenter?: boolean;
 }
 
@@ -38,71 +35,59 @@ interface BottomTabBarProps {
   navigation: any;
 }
 
-export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function BottomTabBar({ state, navigation }: BottomTabBarProps) {
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    createPulseLoop(pulseAnim, 2500).start();
-  }, []);
+    const pulse = createPulseLoop(pulseAnim, 2500);
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
 
   const pulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
   const pulseOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.4] });
+  const centerRoute = state.routes.find((route: any) => TABS.find((tab) => tab.name === route.name)?.isCenter);
+  const centerRouteIndex = state.routes.findIndex((route: any) => route.key === centerRoute?.key);
 
-  const centerRoute = state.routes.find((r: any) => TABS.find(t => t.name === r.name)?.isCenter);
-  const centerRouteIndex = state.routes.findIndex((r: any) => r.key === centerRoute?.key);
+  const emitTabPress = (route: any, index: number) => {
+    hapticImpact('light');
+    const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+    if (state.index !== index && !event.defaultPrevented) navigation.navigate(route.name);
+  };
 
   const onCenterPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const event = navigation.emit({
-      type: 'tabPress',
-      target: centerRoute?.key,
-      canPreventDefault: true,
-    });
-    if (state.index !== centerRouteIndex && !event.defaultPrevented) {
-      navigation.navigate(centerRoute?.name);
-    }
+    hapticImpact('light');
+    const event = navigation.emit({ type: 'tabPress', target: centerRoute?.key, canPreventDefault: true });
+    if (state.index !== centerRouteIndex && !event.defaultPrevented) navigation.navigate(centerRoute?.name);
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} pointerEvents="box-none">
       <BlurView intensity={80} tint="dark" style={styles.blur}>
-        {/* Top edge glow */}
-        <LinearGradient
-          colors={['rgba(59,130,246,0.08)', 'transparent']}
-          style={styles.topGlow}
-        />
+        <LinearGradient colors={['rgba(59,130,246,0.08)', 'transparent']} style={styles.topGlow} />
         <View style={styles.innerBar}>
           {state.routes.map((route: any, index: number) => {
-            const tabMeta = TABS.find((t) => t.name === route.name) || TABS[index];
+            const tabMeta = TABS.find((tab) => tab.name === route.name) || TABS[index];
             if (!tabMeta) return null;
 
+            if (tabMeta.isCenter) return <View key={route.key} style={styles.centerSlot} />;
+
             const isFocused = state.index === index;
-            const isCenter = tabMeta.isCenter;
-
-            const onPress = () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            };
-
-            if (isCenter) {
-              return <View key={route.key} style={{ flex: 1 }} />;
-            }
-
             return (
-              <Pressable key={route.key} onPress={onPress} style={styles.tab}>
+              <Pressable
+                key={route.key}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isFocused }}
+                accessibilityLabel={tabMeta.label}
+                onPress={() => emitTabPress(route, index)}
+                style={[styles.tab, isFocused && styles.activeTab]}
+              >
                 <Ionicons
-                  name={(isFocused ? tabMeta.iconFocused : tabMeta.icon) as any}
-                  size={21}
-                  color={isFocused ? Colors.accent.secondary : Colors.tabBar.inactive}
+                  name={isFocused ? tabMeta.iconFocused : tabMeta.icon}
+                  size={27}
+                  color={isFocused ? '#5F96FF' : '#8295AB'}
                 />
-                <Text style={[styles.tabLabel, { color: isFocused ? Colors.accent.secondary : Colors.tabBar.inactive }]}>
+                <Text style={[styles.tabLabel, { color: isFocused ? '#5F96FF' : '#8295AB' }]}>
                   {tabMeta.label}
                 </Text>
               </Pressable>
@@ -111,120 +96,105 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         </View>
       </BlurView>
 
-      {/* Floating Center Button */}
-      {centerRoute && (
+      {centerRoute ? (
         <View style={styles.absoluteCenterWrapper} pointerEvents="box-none">
           <View style={styles.centerWrapper}>
-            <Animated.View
-              style={[styles.centerGlow, { transform: [{ scale: pulseScale }], opacity: pulseOpacity }]}
-            />
-            <Pressable onPress={onCenterPress} style={styles.centerBtn}>
+            <Animated.View style={[styles.centerGlow, { transform: [{ scale: pulseScale }], opacity: pulseOpacity }]} />
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityLabel="Denoise-X"
+              accessibilityState={{ selected: state.index === centerRouteIndex }}
+              onPress={onCenterPress}
+              style={styles.centerButton}
+            >
               <LinearGradient
-                colors={['#4F8EF7', '#6C63FF', Colors.accent.secondary]}
+                colors={['#108DFF', '#3D62FF', '#5320D7']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.centerGradient}
               >
-                <Ionicons name="sparkles" size={26} color="#fff" />
+                <Ionicons name="sparkles" size={30} color="#fff" />
               </LinearGradient>
             </Pressable>
             <Text style={styles.centerLabel}>Denoise-X</Text>
           </View>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
-const TAB_BAR_HEIGHT = 68;
-const CENTER_SIZE = 58;
+const TAB_BAR_HEIGHT = 85;
+const CENTER_SIZE = 70;
 
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
+    right: 0,
     bottom: 0,
     left: 0,
-    right: 0,
-    paddingHorizontal: 14,
-    paddingBottom: 18,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
   },
   blur: {
-    borderRadius: 24,
+    height: TAB_BAR_HEIGHT,
     overflow: 'hidden',
+    borderRadius: 32,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.08)',
+    borderColor: '#1C334A',
+    backgroundColor: 'rgba(12,28,45,0.92)',
   },
-  topGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    zIndex: 1,
-  },
+  topGlow: { position: 'absolute', top: 0, right: 0, left: 0, height: 2 },
   innerBar: {
+    height: '100%',
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: TAB_BAR_HEIGHT,
-    backgroundColor: 'rgba(6,10,20,0.88)',
-    paddingHorizontal: 6,
+    backgroundColor: 'rgba(12,28,45,0.72)',
   },
   tab: {
     flex: 1,
+    height: 61,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
     gap: 3,
+    borderRadius: 19,
   },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-  },
+  activeTab: { backgroundColor: '#102D5C' },
+  centerSlot: { flex: 1 },
+  tabLabel: { ...Typography.bodySmall, fontSize: 12, lineHeight: 16 },
   absoluteCenterWrapper: {
     position: 'absolute',
-    bottom: 18,
-    left: 0,
-    right: 0,
+    right: 16,
+    bottom: 20,
+    left: 16,
     height: TAB_BAR_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
-  centerWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -30,
-  },
+  centerWrapper: { alignItems: 'center', justifyContent: 'center', marginTop: -38 },
   centerGlow: {
     position: 'absolute',
-    width: CENTER_SIZE + 26,
-    height: CENTER_SIZE + 26,
-    borderRadius: (CENTER_SIZE + 26) / 2,
-    backgroundColor: 'rgba(79,142,247,0.35)',
+    width: CENTER_SIZE + 28,
+    height: CENTER_SIZE + 28,
+    borderRadius: (CENTER_SIZE + 28) / 2,
+    backgroundColor: 'rgba(49,116,255,0.42)',
   },
-  centerBtn: {
+  centerButton: {
     width: CENTER_SIZE,
     height: CENTER_SIZE,
-    borderRadius: CENTER_SIZE / 2,
     overflow: 'hidden',
-    elevation: 20,
-    shadowColor: '#4F8EF7',
+    borderRadius: CENTER_SIZE / 2,
+    borderWidth: 1,
+    borderColor: 'rgba(169,201,255,0.32)',
+    shadowColor: '#3174FF',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
+    shadowOpacity: 0.75,
+    shadowRadius: 18,
+    elevation: 20,
   },
-  centerGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: Colors.accent.secondary,
-    marginTop: 4,
-    letterSpacing: 0.2,
-  },
+  centerGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centerLabel: { ...Typography.bodySmall, marginTop: 5, fontSize: 12, color: '#D9E5F5' },
 });

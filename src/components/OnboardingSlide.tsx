@@ -1,14 +1,12 @@
 /**
- * OnboardingSlide.tsx — Premium Onboarding Slide
- * =================================================
- * Reusable slide with animated icon, headline, description,
- * and floating particle effects.
+ * Reusable black-glass onboarding slide with purpose-driven medical icons.
  */
 
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, Dimensions, Animated, Easing } from 'react-native';
+import { Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+
 import { Colors, Typography, Spacing, BorderRadius } from '../theme';
 import { createFloatLoop, createPulseLoop } from '../theme/animations';
 
@@ -26,93 +24,87 @@ export function OnboardingSlide({
   headline,
   description,
   iconName,
-  accentColor = Colors.accent.primary,
+  accentColor = Colors.startup.teal,
   secondaryIcon,
 }: OnboardingSlideProps) {
   const glow = useRef(new Animated.Value(0)).current;
   const float1 = useRef(new Animated.Value(0)).current;
   const float2 = useRef(new Animated.Value(0)).current;
   const float3 = useRef(new Animated.Value(0)).current;
-  const iconScale = useRef(new Animated.Value(0.8)).current;
+  const iconScale = useRef(new Animated.Value(0.86)).current;
   const iconOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Icon entrance
-    Animated.parallel([
-      Animated.spring(iconScale, { toValue: 1, damping: 12, stiffness: 100, useNativeDriver: true }),
-      Animated.timing(iconOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-    ]).start();
+    const entrance = Animated.parallel([
+      Animated.spring(iconScale, { toValue: 1, damping: 15, stiffness: 110, useNativeDriver: true }),
+      Animated.timing(iconOpacity, { toValue: 1, duration: 550, useNativeDriver: true }),
+    ]);
+    entrance.start();
 
-    // Background glow pulse
-    createPulseLoop(glow, 3000).start();
+    const glowLoop = createPulseLoop(glow, 3400);
+    const floatLoop1 = createFloatLoop(float1, 10, 3000);
+    const floatLoop2 = createFloatLoop(float2, 8, 2500);
+    const floatLoop3 = createFloatLoop(float3, 12, 3500);
+    glowLoop.start();
+    floatLoop1.start();
+    floatLoop2.start();
+    floatLoop3.start();
 
-    // Floating particles
-    createFloatLoop(float1, 15, 3000).start();
-    createFloatLoop(float2, 12, 2500).start();
-    createFloatLoop(float3, 18, 3500).start();
-  }, []);
+    return () => {
+      entrance.stop();
+      glowLoop.stop();
+      floatLoop1.stop();
+      floatLoop2.stop();
+      floatLoop3.stop();
+    };
+  }, [float1, float2, float3, glow, iconOpacity, iconScale]);
 
-  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] });
-  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.35] });
+  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1.12] });
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.22] });
 
   return (
-    <View style={styles.slide}>
-      {/* Floating particles */}
+    <View style={styles.slide} accessible accessibilityLabel={`${headline.replace('\n', ' ')}. ${description}`}>
       <Animated.View style={[styles.particle, styles.p1, { transform: [{ translateY: float1 }] }]}>
         <View style={[styles.particleDot, { backgroundColor: accentColor }]} />
       </Animated.View>
       <Animated.View style={[styles.particle, styles.p2, { transform: [{ translateY: float2 }] }]}>
-        <View style={[styles.particleDot, styles.particleSmall, { backgroundColor: Colors.accent.cyan }]} />
+        <View style={[styles.particleDot, styles.particleSmall, { backgroundColor: Colors.startup.tealBright }]} />
       </Animated.View>
       <Animated.View style={[styles.particle, styles.p3, { transform: [{ translateY: float3 }] }]}>
-        <View style={[styles.particleDot, { backgroundColor: Colors.accent.secondary }]} />
+        <View style={[styles.particleDot, { backgroundColor: Colors.startup.teal }]} />
       </Animated.View>
 
-      {/* Icon area */}
       <View style={styles.iconArea}>
-        {/* Glow ring */}
-        <Animated.View
-          style={[
-            styles.glowRing,
-            { transform: [{ scale: glowScale }], opacity: glowOpacity },
-          ]}
-        >
+        <Animated.View style={[styles.glowRing, { transform: [{ scale: glowScale }], opacity: glowOpacity }]}>
           <LinearGradient
-            colors={[accentColor, 'rgba(56, 189, 248, 0.3)', 'transparent']}
+            colors={[Colors.startup.teal, Colors.startup.cyanDim, 'transparent']}
             style={styles.glowGradient}
             start={{ x: 0.5, y: 0.5 }}
             end={{ x: 1, y: 1 }}
           />
         </Animated.View>
-
-        {/* Main icon */}
-        <Animated.View
-          style={[styles.iconCircle, { transform: [{ scale: iconScale }], opacity: iconOpacity }]}
-        >
+        <View style={[styles.ring, { borderColor: Colors.startup.borderStrong }]} />
+        <Animated.View style={[styles.iconCircle, { transform: [{ scale: iconScale }], opacity: iconOpacity }]}>
           <LinearGradient
-            colors={[accentColor, Colors.accent.secondary]}
+            colors={[Colors.startup.tealBright, Colors.startup.teal]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.iconGradient}
           >
-            <Ionicons name={iconName as any} size={48} color="#fff" />
+            <Ionicons name={iconName as keyof typeof Ionicons.glyphMap} size={43} color={Colors.startup.bg} />
           </LinearGradient>
         </Animated.View>
-
-        {/* Secondary floating icon */}
-        {secondaryIcon && (
-          <Animated.View
-            style={[styles.secondaryIcon, { transform: [{ translateY: float1 }], opacity: iconOpacity }]}
-          >
+        {secondaryIcon ? (
+          <Animated.View style={[styles.secondaryIcon, { transform: [{ translateY: float1 }], opacity: iconOpacity }]}>
             <View style={styles.secondaryIconCircle}>
-              <Ionicons name={secondaryIcon as any} size={20} color={accentColor} />
+              <Ionicons name={secondaryIcon as keyof typeof Ionicons.glyphMap} size={19} color={Colors.startup.tealBright} />
             </View>
           </Animated.View>
-        )}
+        ) : null}
       </View>
 
-      {/* Text */}
-      <View style={styles.textArea}>
+      <View style={styles.copyPanel}>
+        <Text style={styles.stepLabel}>DENOISE-X / CLINICAL INTELLIGENCE</Text>
         <Text style={styles.headline}>{headline}</Text>
         <Text style={styles.description}>{description}</Text>
       </View>
@@ -120,87 +112,72 @@ export function OnboardingSlide({
   );
 }
 
-const ICON_SIZE = 100;
+const ICON_SIZE = 92;
 
 const styles = StyleSheet.create({
   slide: {
     width: SCREEN_W,
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.xxxl,
+    paddingHorizontal: Spacing.xxl,
+    paddingBottom: Spacing.lg,
   },
   particle: { position: 'absolute' },
-  p1: { top: SCREEN_H * 0.15, left: SCREEN_W * 0.15 },
-  p2: { top: SCREEN_H * 0.25, right: SCREEN_W * 0.12 },
-  p3: { top: SCREEN_H * 0.55, left: SCREEN_W * 0.8 },
-  particleDot: { width: 6, height: 6, borderRadius: 3, opacity: 0.4 },
-  particleSmall: { width: 4, height: 4, borderRadius: 2 },
-
+  p1: { top: SCREEN_H * 0.16, left: SCREEN_W * 0.16 },
+  p2: { top: SCREEN_H * 0.28, right: SCREEN_W * 0.13 },
+  p3: { top: SCREEN_H * 0.58, left: SCREEN_W * 0.84 },
+  particleDot: { width: 5, height: 5, borderRadius: 3, opacity: 0.55 },
+  particleSmall: { width: 3, height: 3, borderRadius: 2 },
   iconArea: {
+    width: 214,
+    height: 214,
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.huge,
-    height: 200,
-    width: 200,
+    marginBottom: Spacing.xxxl,
   },
-  glowRing: {
+  glowRing: { position: 'absolute', width: 210, height: 210, borderRadius: 105 },
+  glowGradient: { width: '100%', height: '100%', borderRadius: 105 },
+  ring: {
     position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-  },
-  glowGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 100,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 1,
+    borderStyle: 'dashed',
   },
   iconCircle: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: ICON_SIZE / 2,
     overflow: 'hidden',
-    elevation: 20,
-    shadowColor: '#00D4AA',
+    borderRadius: ICON_SIZE / 2,
+    shadowColor: Colors.startup.teal,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
+    shadowOpacity: 0.3,
+    shadowRadius: 22,
+    elevation: 14,
   },
-  iconGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryIcon: {
-    position: 'absolute',
-    top: 20,
-    right: 10,
-  },
+  iconGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  secondaryIcon: { position: 'absolute', top: 28, right: 8 },
   secondaryIconCircle: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.surface.card,
-    borderWidth: 1,
-    borderColor: Colors.border.subtle,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.startup.border,
+    backgroundColor: Colors.startup.surfaceStrong,
   },
-
-  textArea: {
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
+  copyPanel: {
+    width: '100%',
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.startup.border,
+    borderRadius: BorderRadius.xl,
+    backgroundColor: Colors.startup.surface,
   },
-  headline: {
-    ...Typography.displayMedium,
-    color: Colors.text.primary,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
-  },
-  description: {
-    ...Typography.bodyLarge,
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    lineHeight: 26,
-  },
+  stepLabel: { ...Typography.labelSmall, fontSize: 9, letterSpacing: 1.2, color: Colors.startup.tealBright, marginBottom: 13 },
+  headline: { ...Typography.displayMedium, fontSize: 30, lineHeight: 35, letterSpacing: -0.9, color: Colors.startup.text, marginBottom: 13 },
+  description: { ...Typography.bodyLarge, fontSize: 14, lineHeight: 22, color: Colors.startup.muted },
 });

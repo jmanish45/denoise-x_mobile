@@ -21,6 +21,8 @@ interface GlassCardProps {
   elevated?: boolean;
   /** Skip inner padding (for cards that manage their own) */
   noPadding?: boolean;
+  /** Startup uses warmer graphite glass without changing dashboard cards. */
+  tone?: 'default' | 'startup';
 }
 
 export function GlassCard({
@@ -31,6 +33,7 @@ export function GlassCard({
   glowColor = 'none',
   elevated = false,
   noPadding = false,
+  tone = 'default',
 }: GlassCardProps) {
   const glowBg: Record<string, string> = {
     teal: 'rgba(0,212,170,0.04)',
@@ -42,6 +45,7 @@ export function GlassCard({
   return (
     <View style={[
       styles.wrapper,
+      tone === 'startup' && styles.startupWrapper,
       accentBorder && styles.accentBorder,
       elevated && styles.elevated,
       style,
@@ -49,6 +53,7 @@ export function GlassCard({
       <BlurView intensity={intensity} tint="dark" style={styles.blur}>
         <View style={[
           styles.inner,
+          tone === 'startup' && styles.startupInner,
           noPadding && { padding: 0 },
           glowColor !== 'none' && { backgroundColor: glowBg[glowColor] || Colors.glass.bg },
         ]}>
@@ -66,6 +71,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.glass.border,
   },
+  startupWrapper: { borderColor: Colors.startup.border },
   accentBorder: {
     borderColor: Colors.border.accent,
   },
@@ -83,4 +89,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.glass.bg,
     padding: Spacing.lg,
   },
+  startupInner: { backgroundColor: Colors.startup.surface },
 });

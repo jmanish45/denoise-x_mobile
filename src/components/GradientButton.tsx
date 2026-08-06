@@ -8,7 +8,7 @@
 import React, { useRef } from 'react';
 import { StyleSheet, Text, Pressable, ActivityIndicator, ViewStyle, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
+import { hapticImpact } from '../services/preferences';
 import { Colors, Typography, BorderRadius, Spacing } from '../theme';
 
 interface GradientButtonProps {
@@ -18,6 +18,9 @@ interface GradientButtonProps {
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'outline';
   icon?: React.ReactNode;
+  gradientColors?: [string, string];
+  textColor?: string;
+  accessibilityLabel?: string;
   style?: ViewStyle;
 }
 
@@ -28,12 +31,15 @@ export function GradientButton({
   disabled = false,
   variant = 'primary',
   icon,
+  gradientColors,
+  textColor = '#FFFFFF',
+  accessibilityLabel,
   style,
 }: GradientButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact('light');
     Animated.spring(scale, {
       toValue: 0.96,
       useNativeDriver: true,
@@ -52,7 +58,7 @@ export function GradientButton({
   };
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact('medium');
     onPress();
   };
 
@@ -60,6 +66,9 @@ export function GradientButton({
     return (
       <Animated.View style={[{ transform: [{ scale }] }, style]}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel || title}
+          accessibilityState={{ disabled: disabled || loading, busy: loading }}
           onPress={handlePress}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -77,21 +86,24 @@ export function GradientButton({
     );
   }
 
-  const gradientColors: [string, string] =
-    variant === 'secondary'
+  const resolvedGradientColors: [string, string] =
+    gradientColors || (variant === 'secondary'
       ? [Colors.accent.secondary, '#6366F1']
-      : [Colors.accent.gradient[0], Colors.accent.gradient[1]];
+      : [Colors.accent.gradient[0], Colors.accent.gradient[1]]);
 
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <Pressable
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={disabled || loading}
-      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel || title}
+          accessibilityState={{ disabled: disabled || loading, busy: loading }}
+          onPress={handlePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          disabled={disabled || loading}
+        >
         <LinearGradient
-          colors={gradientColors}
+          colors={resolvedGradientColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={[styles.gradient, (disabled || loading) && styles.disabled]}
@@ -100,7 +112,7 @@ export function GradientButton({
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.text}>{title}</Text>
+            <Text style={[styles.text, { color: textColor }]}>{title}</Text>
           )}
         </LinearGradient>
       </Pressable>
