@@ -4,7 +4,7 @@
  * Points to the same deployed HuggingFace backend used by the web frontend.
  */
 
-export const BASE_URL = 'https://parthgiramkar-denoise-x.hf.space';
+export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'https://parthgiramkar-denoise-x.hf.space';
 
 /** Timeout for all fetch requests (60s — backend is kept warm by ping bot) */
 export const FETCH_TIMEOUT_MS = 60_000;
