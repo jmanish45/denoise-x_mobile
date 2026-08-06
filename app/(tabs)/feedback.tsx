@@ -10,8 +10,8 @@ import { StyleSheet, View, Text, TextInput, Pressable, ScrollView, Animated, Key
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { hapticImpact, hapticNotification, hapticSelection } from '../../src/services/preferences';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/theme';
 import { GlassCard } from '../../src/components/GlassCard';
 import { AnimatedEntry, FadeIn } from '../../src/components/AnimatedEntry';
@@ -32,12 +32,12 @@ export default function FeedbackTab() {
 
   React.useEffect(() => { getMe().then(u => { if (u?.email) setUserEmail(u.email); }).catch(() => {}); }, []);
 
-  const handleStarPress = (star: number) => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRating(star); };
+  const handleStarPress = (star: number) => { hapticImpact('light'); setRating(star); };
 
   const handleSubmit = async () => {
     if (rating === 0) { Alert.alert('Rating Required', 'Please select a star rating.'); return; }
     setSubmitting(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact('medium');
     try {
       const feedback = { id: `fb_${Date.now()}`, rating, category: category || 'General', comment: comment.trim(), timestamp: new Date().toISOString() };
       const existing = await AsyncStorage.getItem(FEEDBACK_KEY);
@@ -62,14 +62,14 @@ export default function FeedbackTab() {
         Animated.spring(checkScale, { toValue: 1, damping: 8, stiffness: 150, useNativeDriver: true }),
         Animated.timing(checkOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
       ]).start();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      hapticNotification('success');
     } catch (err: any) {
       Alert.alert('Submission Failed', err?.name === 'AbortError' ? 'Request timed out.' : `Failed: ${err?.message || 'Unknown error'}`);
     } finally { setSubmitting(false); }
   };
 
   const handleNewFeedback = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact('light');
     setRating(0); setCategory(''); setComment(''); setSubmitted(false);
     checkScale.setValue(0); checkOpacity.setValue(0);
   };
@@ -128,7 +128,7 @@ export default function FeedbackTab() {
                 <Text style={s.secLabel}>Category</Text>
                 <View style={s.cats}>
                   {CATEGORIES.map((cat) => (
-                    <Pressable key={cat} onPress={() => { Haptics.selectionAsync(); setCategory(cat); }}
+                    <Pressable key={cat} onPress={() => { hapticSelection(); setCategory(cat); }}
                       style={[s.chip, category === cat && s.chipActive]}>
                       <Text style={[s.chipText, category === cat && s.chipTextActive]}>{cat}</Text>
                     </Pressable>

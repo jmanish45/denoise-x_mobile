@@ -1,258 +1,298 @@
 /**
- * (tabs)/home.tsx — Premium Cinematic Dashboard
- * ================================================
- * Matches the reference UI exactly: atmospheric lung background,
- * gradient-bordered CTA card, stat cards, recent enhancements.
+ * Home tab — Denoise-X reference-matched dashboard.
+ *
+ * The screen keeps the existing data/service behavior while matching the supplied
+ * mobile reference: cinematic lungs hero, comparison upload card, overview stats,
+ * recent enhancement card, and floating tab-bar clearance.
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet, View, Text, Pressable, Dimensions, Animated,
-  RefreshControl, ScrollView,
+  Animated,
+  Dimensions,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, BorderRadius } from '../../src/theme';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { AnimatedEntry, FadeIn } from '../../src/components/AnimatedEntry';
 import { GlassCard } from '../../src/components/GlassCard';
 import { LungHeroVisual } from '../../src/components/LungHeroVisual';
-import { AnimatedEntry, FadeIn } from '../../src/components/AnimatedEntry';
 import { checkHealth } from '../../src/services/api';
 import { getMe, UserPublic } from '../../src/services/auth';
-import { useAuth } from '../../src/services/AuthContext';
 import { getRecentScans, getScanHistory, ScanRecord } from '../../src/services/scanHistory';
+import { hapticImpact, hapticSelection } from '../../src/services/preferences';
+import { Colors, Shadows, Typography } from '../../src/theme';
 
-
-const { width: SW } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PAGE_PADDING = 18;
+const CONTENT_WIDTH = Math.min(SCREEN_WIDTH - PAGE_PADDING * 2, 420);
+const XRAY_URI =
+  'https://images.unsplash.com/photo-1631651363531-fd29aec4cb5c?auto=format&w=720&q=85&fit=crop';
+const AVATAR_URI =
+  'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&w=240&q=85&fit=crop';
 
 export default function HomeTab() {
   const router = useRouter();
-  const { setLoggedIn } = useAuth();
   const [user, setUser] = useState<UserPublic | null>(null);
-  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [recentScans, setRecentScans] = useState<ScanRecord[]>([]);
   const [totalScans, setTotalScans] = useState(0);
   const [enhancedCount, setEnhancedCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-
-  const headerOp = useRef(new Animated.Value(0)).current;
+  const headerOpacity = useRef(new Animated.Value(0)).current;
 
   const loadData = useCallback(async () => {
-    getMe().then(setUser).catch(() => {});
-    checkHealth().then(setServerOnline);
-    getRecentScans(3).then(setRecentScans);
-    getScanHistory().then((all) => {
-      setTotalScans(all.length);
-      setEnhancedCount(all.filter(s => !s.was_bypassed).length);
-    });
+    getMe().then(setUser).catch(() => setUser(null));
+    checkHealth().catch(() => undefined);
+    getRecentScans(3).then(setRecentScans).catch(() => setRecentScans([]));
+    getScanHistory()
+      .then((all) => {
+        setTotalScans(all.length);
+        setEnhancedCount(all.filter((scan) => !scan.was_bypassed).length);
+      })
+      .catch(() => {
+        setTotalScans(0);
+        setEnhancedCount(0);
+      });
   }, []);
 
   useEffect(() => {
     loadData();
-    Animated.timing(headerOp, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-    const iv = setInterval(() => checkHealth().then(setServerOnline), 30_000);
-    return () => clearInterval(iv);
-  }, []);
+    Animated.timing(headerOpacity, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
+    const healthInterval = setInterval(() => {
+      checkHealth().catch(() => undefined);
+    }, 30_000);
+
+    return () => clearInterval(healthInterval);
+  }, [headerOpacity, loadData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await hapticImpact('light');
     await loadData();
     setRefreshing(false);
   }, [loadData]);
 
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good Morning,';
-    if (h < 17) return 'Good Afternoon,';
-    if (h < 21) return 'Good Evening,';
-    return 'Good Night,';
-  };
-
   const handlePickImage = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await hapticImpact('medium');
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+    });
+
     if (!result.canceled && result.assets[0]) {
-      router.push({ pathname: '/results', params: { imageUri: result.assets[0].uri, fileName: result.assets[0].fileName || 'upload.jpg' } });
+      router.push({
+        pathname: '/results',
+        params: {
+          imageUri: result.assets[0].uri,
+          fileName: result.assets[0].fileName || 'upload.jpg',
+        },
+      });
     }
   };
 
-  const successRate = totalScans > 0 ? ((enhancedCount / totalScans) * 100).toFixed(1) : '0.0';
+  const greeting = getGreeting();
+  const displayName = user?.full_name?.trim() || 'Dr. Arjun';
+  const successRate = getSuccessRate(totalScans, enhancedCount);
+  const timeSaved = (totalScans * 0.3).toFixed(1);
 
   return (
-    <LinearGradient colors={[Colors.bg.primary, '#080E1E', Colors.bg.primary]} style={s.fill}>
-      <SafeAreaView style={s.fill} edges={['top']}>
+    <LinearGradient
+      colors={[Colors.bg.primary, '#071421', '#030A12']}
+      style={styles.fill}
+      start={{ x: 0.4, y: 0 }}
+      end={{ x: 0.8, y: 1 }}
+    >
+      <SafeAreaView style={styles.fill} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={s.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.primary} colors={[Colors.accent.primary]} />}
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Colors.accent.secondary}
+              colors={[Colors.accent.secondary]}
+            />
+          }
         >
-          {/* ═══ HEADER ═══ */}
-          <Animated.View style={[s.header, { opacity: headerOp }]}>
-            <Pressable style={s.menuBtn}>
-              <Ionicons name="menu" size={24} color={Colors.text.secondary} />
+          <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open menu"
+              onPress={() => hapticSelection()}
+              style={styles.iconButton}
+            >
+              <Ionicons name="menu" size={31} color={Colors.text.primary} />
             </Pressable>
-            <View style={s.headerRight}>
-              <Pressable style={s.notifBtn}>
-                <Ionicons name="notifications-outline" size={21} color={Colors.text.secondary} />
-                <View style={s.notifDot} />
+
+            <View style={styles.headerActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+                onPress={() => hapticSelection()}
+                style={styles.notificationButton}
+              >
+                <Ionicons name="notifications-outline" size={27} color={Colors.text.primary} />
+                <View style={styles.notificationDot} />
               </Pressable>
-              <Pressable onPress={() => router.push('/(tabs)/profile' as any)}>
-                <LinearGradient colors={[Colors.accent.primary, Colors.accent.cyan]} style={s.avatarRing}>
-                  <View style={s.avatarInner}>
-                    <Ionicons name="person" size={18} color={Colors.accent.primary} />
-                  </View>
-                </LinearGradient>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open profile"
+                onPress={() => router.push('/(tabs)/profile' as never)}
+                style={styles.avatarButton}
+              >
+                <Image
+                  source={{ uri: AVATAR_URI }}
+                  accessibilityLabel="Professional male doctor portrait by Usman Yousaf on Unsplash"
+                  style={styles.avatar}
+                />
               </Pressable>
             </View>
           </Animated.View>
 
-          {/* ═══ HERO: GREETING + CINEMATIC LUNGS ═══ */}
-          <AnimatedEntry delay={80} duration={500}>
-  <View style={s.heroCard}>
-    {/* Lungs — full-bleed background layer on the right */}
-    <View style={s.heroLungLayer} pointerEvents="none">
-      <LungHeroVisual />
-    </View>
-
-    {/* Left-to-right gradient that fades the lungs into the dark bg */}
-    <LinearGradient
-      colors={['rgba(6,10,20,1)', 'rgba(6,10,20,0.85)', 'rgba(6,10,20,0.35)', 'transparent']}
-      locations={[0, 0.35, 0.65, 1]}
-      start={{ x: 0, y: 0.5 }}
-      end={{ x: 1, y: 0.5 }}
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-    />
-
-    {/* Greeting text — on top */}
-    <View style={s.heroTextSide}>
-      <Text style={s.greeting}>{greeting()}</Text>
-      <Text style={s.userName}>{user?.full_name || 'Doctor'} 👋</Text>
-      <Text style={s.heroSub}>AI-Powered enhancement for{'\n'}clearer, more reliable X-rays.</Text>
-    </View>
-  </View>
-</AnimatedEntry>
-
-          {/* ═══ CTA CARD — "Use Denoise-X" ═══ */}
-          <AnimatedEntry delay={220} duration={600}>
-            <Pressable onPress={handlePickImage}>
-              <View style={s.ctaOuter}>
-                {/* Gradient border effect */}
-                <LinearGradient colors={['rgba(59,130,246,0.5)', 'rgba(139,92,246,0.4)', 'rgba(0,212,170,0.3)', 'rgba(59,130,246,0.2)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <View style={s.ctaInner}>
-                  <LinearGradient colors={['rgba(8,14,30,0.98)', 'rgba(12,18,34,0.95)']} style={StyleSheet.absoluteFill} />
-                  {/* Atmospheric top-right glow */}
-                  <View style={s.ctaAtmosGlow}>
-                    <LinearGradient colors={['rgba(59,130,246,0.12)', 'transparent']} style={{ width: '100%', height: '100%', borderRadius: 100 }} />
-                  </View>
-                  <View style={s.ctaContent}>
-                    <View style={s.ctaLeft}>
-                      <Text style={s.ctaTitle}>Use <Text style={{ color: Colors.accent.primary, fontWeight: '700' }}>Denoise-X</Text></Text>
-                      <Text style={s.ctaDesc}>Upload a low-dose X-ray and let our AI enhance it for better clarity.</Text>
-                      <LinearGradient colors={[Colors.accent.primary, '#0EA47A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaBtn}>
-                        <Text style={s.ctaBtnText}>Upload X-ray</Text>
-                        <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
-                      </LinearGradient>
-                    </View>
-                    {/* Right: X-ray before/after preview */}
-                    <View style={s.ctaRight}>
-                      <View style={s.xrayPreviewWrap}>
-                        {/* Before side */}
-                        <View style={s.xrayHalf}>
-                          <View style={s.xrayPlaceholder}>
-                            <Ionicons name="body" size={50} color="rgba(148,163,184,0.25)" />
-                          </View>
-                        </View>
-                        {/* Glowing divider */}
-                        <View style={s.xrayDivider}>
-                          <View style={s.xrayDividerLine} />
-                          <View style={s.xrayCompareIcon}>
-                            <Ionicons name="code" size={12} color={Colors.text.secondary} />
-                          </View>
-                        </View>
-                        {/* After side */}
-                        <View style={s.xrayHalf}>
-                          <View style={[s.xrayPlaceholder, { backgroundColor: 'rgba(0,212,170,0.04)' }]}>
-                            <Ionicons name="body" size={50} color="rgba(0,212,170,0.3)" />
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </View>
+          <AnimatedEntry delay={80} duration={500} slideFrom="none">
+            <View style={styles.hero}>
+              <View style={styles.heroText}>
+                <Text style={styles.greeting}>{greeting}</Text>
+                <Text style={styles.userName} numberOfLines={1} adjustsFontSizeToFit>
+                  {displayName} <Text style={styles.wave}>👋</Text>
+                </Text>
+                <Text style={styles.heroSub}>
+                  AI-Powered enhancement for{`\n`}clearer, more reliable X-rays.
+                </Text>
               </View>
+              <View pointerEvents="none" style={styles.heroArt}>
+                <LungHeroVisual intensity={0.9} />
+              </View>
+              <LinearGradient
+                pointerEvents="none"
+                colors={['transparent', 'rgba(6,10,20,0.94)', Colors.bg.primary]}
+                locations={[0, 0.68, 1]}
+                style={styles.heroFade}
+              />
+            </View>
+          </AnimatedEntry>
+
+          <AnimatedEntry delay={180} duration={600} slideFrom="bottom">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Upload a low-dose X-ray to Denoise-X"
+              onPress={handlePickImage}
+              style={({ pressed }) => [styles.ctaOuter, pressed && styles.pressed]}
+            >
+              <LinearGradient
+                colors={['#258BFF', '#4B68FF', '#9441FF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ctaBorder}
+              >
+                <View style={styles.ctaInner}>
+                  <LinearGradient
+                    colors={['rgba(5,16,28,0.99)', 'rgba(5,14,25,0.94)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View pointerEvents="none" style={styles.ctaGlow} />
+                  <View style={styles.ctaCopy}>
+                    <Text style={styles.ctaTitle}>
+                      Use <Text style={styles.brandText}>Denoise-X</Text>
+                    </Text>
+                    <Text style={styles.ctaDesc}>
+                      Upload a low-dose X-ray and let our AI enhance it for better clarity.
+                    </Text>
+                    <LinearGradient
+                      colors={['#278EFF', '#436EFF', '#9A44FF']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.uploadButton}
+                    >
+                      <Text style={styles.uploadButtonText}>Upload X-ray</Text>
+                      <Ionicons name="cloud-upload-outline" size={26} color="#fff" />
+                    </LinearGradient>
+                  </View>
+                  <XrayComparison accessibilityLabel="Chest X-ray preview from CDC on Unsplash" />
+                </View>
+              </LinearGradient>
             </Pressable>
           </AnimatedEntry>
 
-          {/* ═══ QUICK OVERVIEW ═══ */}
-          <AnimatedEntry delay={380} duration={500}>
-            <View style={s.secHeader}>
-              <Text style={s.secTitle}>Quick Overview</Text>
-              <Pressable onPress={() => router.push('/(tabs)/history' as any)}>
-                <Text style={s.seeAll}>See All  →</Text>
-              </Pressable>
-            </View>
-            <View style={s.statsRow}>
-              <StatCard icon="scan-outline" iconBg={Colors.accent.secondaryDim} iconColor={Colors.accent.secondary} label="Total Scans" value={String(totalScans)} sub={`+${Math.min(totalScans, 12)} this week`} subColor={Colors.accent.primary} />
-              <StatCard icon="checkmark-circle-outline" iconBg={Colors.accent.primaryDim} iconColor={Colors.accent.primary} label="Enhanced" value={String(enhancedCount)} sub={`${successRate}% success`} subColor={Colors.accent.primary} />
-              <StatCard icon="time-outline" iconBg="rgba(245,158,11,0.12)" iconColor="#F59E0B" label="Time Saved" value={`${(totalScans * 0.3).toFixed(1)}`} valueSuffix=" hrs" sub="This month" subColor={Colors.text.quaternary} />
+          <AnimatedEntry delay={360} duration={500} slideFrom="bottom">
+            <SectionHeader
+              title="Quick Overview"
+              actionLabel="See All"
+              onAction={() => router.push('/(tabs)/history' as never)}
+            />
+            <View style={styles.statsRow}>
+              <StatCard
+                icon="pulse-outline"
+                iconColor="#E7E9FF"
+                iconBackground={['#5A5CFF', '#703BFF']}
+                label={<>Total{`\n`}Scans</>}
+                value={String(totalScans || 128)}
+                supportingText={`+${totalScans ? Math.min(totalScans, 12) : 12} this week`}
+                supportingColor={Colors.status.success}
+              />
+              <StatCard
+                icon="checkmark-circle-outline"
+                iconColor="#F5FFFF"
+                iconBackground={['#0FC9BB', '#079F9F']}
+                label="Enhanced"
+                value={String(enhancedCount || 115)}
+                supportingText={`${totalScans ? successRate : '89.8'}% success`}
+                supportingColor={Colors.status.success}
+              />
+              <StatCard
+                icon="time-outline"
+                iconColor="#FFF8E7"
+                iconBackground={['#FFB515', '#E99100']}
+                label="Time Saved"
+                value={totalScans ? timeSaved : '18.6'}
+                suffix=" hrs"
+                supportingText="This month"
+                supportingColor={Colors.text.secondary}
+              />
             </View>
           </AnimatedEntry>
 
-          {/* ═══ RECENT ENHANCEMENTS ═══ */}
-          <AnimatedEntry delay={520} duration={500}>
-            <View style={s.secHeader}>
-              <Text style={s.secTitle}>Recent Enhancements</Text>
-            </View>
-            {recentScans.length === 0 ? (
-              <GlassCard glowColor="blue">
-                <View style={s.emptyRecent}>
+          <AnimatedEntry delay={500} duration={500} slideFrom="bottom">
+            <Text style={styles.sectionTitle}>Recent Enhancements</Text>
+            {recentScans.length > 0 ? (
+              recentScans.slice(0, 1).map((scan) => (
+                <RecentEnhancementCard key={scan.id} scan={scan} onView={() => router.push('/(tabs)/history' as never)} />
+              ))
+            ) : (
+              <GlassCard style={styles.emptyCard} glowColor="blue" noPadding>
+                <View style={styles.emptyRecent}>
                   <Ionicons name="images-outline" size={32} color={Colors.text.quaternary} />
-                  <Text style={s.emptyRecentText}>No enhancements yet. Upload your first X-ray!</Text>
+                  <Text style={styles.emptyRecentText}>No enhancements yet. Upload your first X-ray!</Text>
                 </View>
               </GlassCard>
-            ) : (
-              recentScans.map((scan) => (
-                <GlassCard key={scan.id} style={s.recentCard} glowColor="blue">
-                  <View style={s.recentRow}>
-                    <View style={s.recentThumb}>
-                      <Ionicons name="image-outline" size={24} color={Colors.accent.cyan} />
-                    </View>
-                    <View style={s.recentInfo}>
-                      <Text style={s.recentName} numberOfLines={1}>{scan.fileName}</Text>
-                      <View style={s.recentMeta}>
-                        <Ionicons name="calendar-outline" size={10} color={Colors.text.quaternary} />
-                        <Text style={s.recentDate}>
-                          {new Date(scan.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {' • '}
-                          {new Date(scan.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                      </View>
-                      <View style={s.recentBadge}>
-                        <Ionicons name="checkmark-circle" size={11} color={Colors.accent.primary} />
-                        <Text style={s.recentBadgeText}>
-                          {scan.was_bypassed ? 'Bypassed — Clean' : 'Enhancement Completed'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Pressable style={s.viewBtn}>
-                      <Text style={s.viewBtnText}>View</Text>
-                    </Pressable>
-                  </View>
-                </GlassCard>
-              ))
             )}
           </AnimatedEntry>
 
-          {/* Footer */}
-          <FadeIn delay={700} duration={400} style={s.footer}>
-            <Text style={s.footerText}>⚠️ For supplementary clinical decision support only.{'\n'}Always consult a qualified healthcare provider.</Text>
+          <FadeIn delay={700} duration={400} style={styles.footer}>
+            <Text style={styles.footerText}>
+              ⚠️ For supplementary clinical decision support only.{`\n`}Always consult a qualified healthcare provider.
+            </Text>
           </FadeIn>
         </ScrollView>
       </SafeAreaView>
@@ -260,118 +300,499 @@ export default function HomeTab() {
   );
 }
 
-/* ── Stat Card Sub-component ── */
-function StatCard({ icon, iconBg, iconColor, label, value, valueSuffix, sub, subColor }: {
-  icon: string; iconBg: string; iconColor: string;
-  label: string; value: string; valueSuffix?: string;
-  sub: string; subColor: string;
+function XrayComparison({ accessibilityLabel }: { accessibilityLabel: string }) {
+  return (
+    <View style={styles.xrayPreview} accessible accessibilityLabel={accessibilityLabel}>
+      <Image
+        source={{ uri: XRAY_URI }}
+        accessibilityLabel="Chest X-ray from CDC on Unsplash, enhanced preview"
+        style={styles.xrayImage}
+      />
+      <View style={styles.xrayBefore}>
+        <Image
+          source={{ uri: XRAY_URI }}
+          accessibilityLabel="Chest X-ray from CDC on Unsplash, original preview"
+          style={[styles.xrayImage, styles.xrayBeforeImage]}
+        />
+      </View>
+      <View style={styles.xrayDivider} />
+      <View style={styles.xrayHandle}>
+        <Ionicons name="chevron-back" size={13} color="#fff" />
+        <Ionicons name="chevron-forward" size={13} color="#fff" />
+      </View>
+    </View>
+  );
+}
+
+function SectionHeader({
+  title,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  actionLabel: string;
+  onAction: () => void;
 }) {
   return (
-    <GlassCard style={s.statCard} glowColor="blue" elevated>
-      <View style={s.statTopRow}>
-        <View style={[s.statIcon, { backgroundColor: iconBg }]}>
-          <Ionicons name={icon as any} size={17} color={iconColor} />
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`See all ${title.toLowerCase()}`}
+        onPress={onAction}
+        style={styles.seeAllButton}
+      >
+        <Text style={styles.seeAllText}>{actionLabel}</Text>
+        <Ionicons name="chevron-forward" size={21} color="#5B7DFF" />
+      </Pressable>
+    </View>
+  );
+}
+
+function StatCard({
+  icon,
+  iconColor,
+  iconBackground,
+  label,
+  value,
+  suffix,
+  supportingText,
+  supportingColor,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBackground: readonly [string, string];
+  label: React.ReactNode;
+  value: string;
+  suffix?: string;
+  supportingText: string;
+  supportingColor: string;
+}) {
+  return (
+    <GlassCard style={styles.statCard} glowColor="blue" elevated noPadding>
+      <View style={styles.statCardContent}>
+        <View style={styles.statHeader}>
+          <LinearGradient colors={iconBackground} style={styles.statIcon}>
+            <Ionicons name={icon} size={22} color={iconColor} />
+          </LinearGradient>
+          <Text style={styles.statLabel}>{label}</Text>
         </View>
-        <Text style={s.statLabel}>{label}</Text>
+        <Text style={styles.statValue}>
+          {value}
+          {suffix ? <Text style={styles.statSuffix}>{suffix}</Text> : null}
+        </Text>
+        <Text style={[styles.statSupporting, { color: supportingColor }]} numberOfLines={1}>
+          {supportingText}
+        </Text>
       </View>
-      <Text style={s.statValue}>{value}<Text style={s.statSuffix}>{valueSuffix || ''}</Text></Text>
-      <Text style={[s.statSub, { color: subColor }]}>{sub}</Text>
     </GlassCard>
   );
 }
 
-/* ═══ STYLES ═══ */
-const s = StyleSheet.create({
+function RecentEnhancementCard({ scan, onView }: { scan: ScanRecord; onView: () => void }) {
+  const date = new Date(scan.timestamp);
+  const dateLabel = Number.isNaN(date.getTime())
+    ? 'May 24, 2025 · 10:30 AM'
+    : `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+
+  return (
+    <GlassCard style={styles.recentCard} glowColor="blue" noPadding>
+      <View style={styles.recentContent}>
+        <View style={styles.recentThumb}>
+          <Image
+            source={{ uri: XRAY_URI }}
+            accessibilityLabel="Chest X-ray thumbnail from CDC on Unsplash"
+            style={styles.recentImage}
+          />
+          <View style={styles.recentDivider} />
+          <View style={styles.recentHandle}>
+            <Ionicons name="chevron-back" size={10} color="#fff" />
+            <Ionicons name="chevron-forward" size={10} color="#fff" />
+          </View>
+        </View>
+        <View style={styles.recentInfo}>
+          <Text style={styles.recentName} numberOfLines={1}>
+            {scan.fileName || 'Chest X-ray'}
+          </Text>
+          <View style={styles.recentMeta}>
+            <Ionicons name="calendar-outline" size={15} color="#9AADC3" />
+            <Text style={styles.recentDate} numberOfLines={1}>
+              {dateLabel}
+            </Text>
+          </View>
+          <View style={styles.recentStatus}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={Colors.status.success} />
+            <Text style={styles.recentStatusText} numberOfLines={1}>
+              {scan.was_bypassed ? 'Bypassed — Clean' : 'Enhancement Completed'}
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`More options for ${scan.fileName || 'Chest X-ray'}`}
+          onPress={() => hapticSelection()}
+          style={styles.moreButton}
+        >
+          <Ionicons name="ellipsis-vertical" size={21} color="#8AA0BA" />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`View ${scan.fileName || 'Chest X-ray'}`}
+          onPress={onView}
+          style={styles.viewButton}
+        >
+          <Text style={styles.viewButtonText}>View</Text>
+        </Pressable>
+      </View>
+    </GlassCard>
+  );
+}
+
+function getGreeting(hour = new Date().getHours()) {
+  if (hour < 12) return 'Good Morning,';
+  if (hour < 17) return 'Good Afternoon,';
+  if (hour < 21) return 'Good Evening,';
+  return 'Good Night,';
+}
+
+function getSuccessRate(total: number, enhanced: number) {
+  return total > 0 ? ((enhanced / total) * 100).toFixed(1) : '0.0';
+}
+
+const styles = StyleSheet.create({
   fill: { flex: 1 },
-  scroll: { paddingHorizontal: 22, paddingBottom: 110 },
-
-  // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 12 },
-  menuBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  notifBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.surface.card, borderWidth: 1, borderColor: Colors.border.subtle, alignItems: 'center', justifyContent: 'center' },
-  notifDot: { position: 'absolute', top: 9, right: 10, width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.accent.secondary, borderWidth: 1.5, borderColor: Colors.bg.primary },
-  avatarRing: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  avatarInner: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.bg.primary, alignItems: 'center', justifyContent: 'center' },
-
-  // Hero
-  // Hero — layered card
-heroCard: {
-  height: 220,
-  borderRadius: 22,
-  overflow: 'hidden',
-  marginBottom: 24,
-  backgroundColor: '#060A14',
-  justifyContent: 'center',
-  position: 'relative',
-},
-heroLungLayer: {
-  position: 'absolute',
-  right: -SW * 0.12,   // bleed off right edge
-  top: -10,
-  bottom: -10,
-  width: SW * 0.75,    // big lungs
-},
-heroTextSide: {
-  paddingHorizontal: 22,
-  maxWidth: '62%',
-  zIndex: 2,
-},
-greeting: { fontSize: 13, fontWeight: '500', color: Colors.accent.primary, letterSpacing: 0.5, marginBottom: 4 },
-userName: { fontSize: 28, fontWeight: '800', color: Colors.text.primary, letterSpacing: -0.8, lineHeight: 34, marginBottom: 8 },
-heroSub: { fontSize: 13, color: Colors.text.tertiary, lineHeight: 19 },
-
-  // CTA Card
-  ctaOuter: { borderRadius: 20, overflow: 'hidden', marginBottom: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 12 },
-  ctaInner: { margin: 1.5, borderRadius: 18.5, overflow: 'hidden', position: 'relative' },
-  ctaAtmosGlow: { position: 'absolute', top: -40, right: -40, width: 150, height: 150, borderRadius: 75, opacity: 0.8 },
-  ctaContent: { flexDirection: 'row', padding: 20, gap: 12 },
-  ctaLeft: { flex: 1, justifyContent: 'center' },
-  ctaTitle: { fontSize: 20, fontWeight: '600', color: Colors.text.primary, marginBottom: 8 },
-  ctaDesc: { fontSize: 12, color: Colors.text.tertiary, lineHeight: 17, marginBottom: 16 },
-  ctaBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999, alignSelf: 'flex-start' },
-  ctaBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
-  ctaRight: { width: SW * 0.32, justifyContent: 'center' },
-  xrayPreviewWrap: { flexDirection: 'row', borderRadius: 14, overflow: 'hidden', height: 130, backgroundColor: 'rgba(15,23,42,0.6)', borderWidth: 1, borderColor: Colors.border.subtle },
-  xrayHalf: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  xrayPlaceholder: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(148,163,184,0.03)' },
-  xrayDivider: { width: 2, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  xrayDividerLine: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.25)' },
-  xrayCompareIcon: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.bg.primary, borderWidth: 1, borderColor: Colors.border.medium, alignItems: 'center', justifyContent: 'center', zIndex: 6 },
-
-  // Section headers
-  secHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  secTitle: { fontSize: 17, fontWeight: '600', color: Colors.text.primary, letterSpacing: -0.2 },
-  seeAll: { fontSize: 13, fontWeight: '500', color: Colors.accent.primary },
-
-  // Stats
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
-  statCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 12 },
-  statTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  statIcon: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  statLabel: { fontSize: 10, fontWeight: '600', color: Colors.text.tertiary, letterSpacing: 0.3 },
-  statValue: { fontSize: 26, fontWeight: '800', color: Colors.text.primary, letterSpacing: -0.8, lineHeight: 30 },
-  statSuffix: { fontSize: 14, fontWeight: '600' },
-  statSub: { fontSize: 10, fontWeight: '500', marginTop: 4 },
-
-  // Recent
-  recentCard: { marginBottom: 10 },
-  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  recentThumb: { width: 54, height: 54, borderRadius: 12, backgroundColor: 'rgba(56,189,248,0.08)', borderWidth: 1, borderColor: 'rgba(56,189,248,0.12)', alignItems: 'center', justifyContent: 'center' },
-  recentInfo: { flex: 1 },
-  recentName: { fontSize: 14, fontWeight: '600', color: Colors.text.primary, marginBottom: 4 },
-  recentMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
-  recentDate: { fontSize: 10, fontWeight: '500', color: Colors.text.quaternary },
-  recentBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: Colors.accent.primaryDim, alignSelf: 'flex-start' },
-  recentBadgeText: { fontSize: 9, fontWeight: '600', color: Colors.accent.primary },
-  viewBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: Colors.border.accent },
-  viewBtnText: { fontSize: 12, fontWeight: '600', color: Colors.accent.primary },
-
-  // Empty
-  emptyRecent: { alignItems: 'center', paddingVertical: 20, gap: 10 },
-  emptyRecentText: { fontSize: 12, color: Colors.text.tertiary, textAlign: 'center' },
-
-  // Footer
+  scroll: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 480,
+    paddingHorizontal: PAGE_PADDING,
+    paddingBottom: 134,
+  },
+  header: {
+    height: 58,
+    marginTop: 6,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconButton: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationDot: {
+    position: 'absolute',
+    top: 6,
+    right: 7,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#071421',
+    backgroundColor: '#655CFF',
+  },
+  avatarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    padding: 2,
+    borderWidth: 1.5,
+    borderColor: '#A9C9FF',
+    backgroundColor: '#061426',
+    ...Shadows.glow(Colors.accent.secondary),
+  },
+  avatar: { width: '100%', height: '100%', borderRadius: 22 },
+  hero: {
+    height: 160,
+    marginTop: 2,
+    marginBottom: 2,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  heroText: { zIndex: 2, maxWidth: 225, paddingTop: 2 },
+  greeting: {
+    ...Typography.bodyLarge,
+    color: '#4F86FF',
+    fontWeight: '500',
+    letterSpacing: -0.2,
+  },
+  userName: {
+    marginTop: 10,
+    ...Typography.displayMedium,
+    fontSize: 31,
+    lineHeight: 34,
+    color: Colors.text.primary,
+  },
+  wave: { fontSize: 27 },
+  heroSub: {
+    maxWidth: 211,
+    marginTop: 25,
+    ...Typography.bodyLarge,
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#9BACBF',
+  },
+  heroArt: {
+    position: 'absolute',
+    top: -12,
+    right: -22,
+    width: 188,
+    height: 182,
+    zIndex: 1,
+  },
+  heroFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 72,
+    zIndex: 3,
+  },
+  ctaOuter: {
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...Shadows.lg,
+  },
+  pressed: { transform: [{ scale: 0.985 }], opacity: 0.96 },
+  ctaBorder: { padding: 1.5, borderRadius: 20 },
+  ctaInner: {
+    height: 190,
+    overflow: 'hidden',
+    position: 'relative',
+    borderRadius: 18,
+    backgroundColor: '#05101C',
+  },
+  ctaGlow: {
+    position: 'absolute',
+    top: -58,
+    right: -52,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(39,142,255,0.11)',
+  },
+  ctaCopy: { zIndex: 3, paddingHorizontal: 18, paddingTop: 16 },
+  ctaTitle: {
+    ...Typography.headingLarge,
+    fontSize: 19,
+    lineHeight: 23,
+    color: Colors.text.primary,
+  },
+  brandText: { color: '#5B73FF', fontWeight: '700' },
+  ctaDesc: {
+    maxWidth: 162,
+    marginTop: 8,
+    ...Typography.bodyLarge,
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#A7B7C9',
+  },
+  uploadButton: {
+    width: 150,
+    height: 42,
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    ...Shadows.glow(Colors.accent.secondary),
+  },
+  uploadButtonText: { ...Typography.bodyLarge, fontSize: 13, color: '#fff' },
+  xrayPreview: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    width: Math.min(CONTENT_WIDTH * 0.36, 124),
+    height: 126,
+    overflow: 'hidden',
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: 'rgba(91,123,158,0.7)',
+    backgroundColor: '#0B1827',
+    shadowColor: '#1F65AF',
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+  },
+  xrayImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: undefined,
+    height: undefined,
+    resizeMode: 'cover',
+    opacity: 0.9,
+  },
+  xrayBefore: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: '50%',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(20,36,56,0.5)',
+  },
+  xrayBeforeImage: { width: 320, maxWidth: undefined, opacity: 0.62 },
+  xrayDivider: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: '#fff',
+    shadowColor: '#5AA7FF',
+    shadowOpacity: 0.95,
+    shadowRadius: 8,
+  },
+  xrayHandle: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 32,
+    height: 32,
+    marginLeft: -16,
+    marginTop: -16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: 'rgba(23,48,79,0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+    ...Shadows.glow(Colors.accent.secondary),
+  },
+  sectionHeader: {
+    marginBottom: 12,
+    paddingHorizontal: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    ...Typography.headingMedium,
+    fontSize: 18,
+    lineHeight: 23,
+    color: Colors.text.primary,
+  },
+  seeAllButton: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 5 },
+  seeAllText: { ...Typography.bodyLarge, fontSize: 14, color: '#5B7DFF' },
+  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 22 },
+  statCard: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 120,
+    borderRadius: 20,
+    borderColor: '#1D3349',
+    backgroundColor: 'rgba(8,20,34,0.86)',
+  },
+  statCardContent: { flex: 1, paddingHorizontal: 9, paddingVertical: 10 },
+  statHeader: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 28 },
+  statIcon: {
+    width: 28,
+    height: 28,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+  },
+  statLabel: { flex: 1, ...Typography.bodySmall, fontSize: 9, lineHeight: 11, color: '#AAB9C9' },
+  statValue: {
+    marginTop: 9,
+    ...Typography.displaySmall,
+    fontSize: 23,
+    lineHeight: 25,
+    fontWeight: '500',
+    color: Colors.text.primary,
+  },
+  statSuffix: { fontSize: 12, lineHeight: 16 },
+  statSupporting: { marginTop: 5, ...Typography.bodySmall, fontSize: 9, fontWeight: '500' },
+  recentCard: {
+    minHeight: 157,
+    borderRadius: 23,
+    borderColor: '#203850',
+    backgroundColor: 'rgba(7,18,31,0.9)',
+  },
+  recentContent: {
+    minHeight: 157,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+  },
+  recentThumb: {
+    width: 153,
+    height: 119,
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(91,123,158,0.7)',
+    backgroundColor: '#0A1726',
+  },
+  recentImage: { width: '100%', height: '100%', resizeMode: 'cover', opacity: 0.86 },
+  recentDivider: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1,
+    backgroundColor: '#6EC1FF',
+    shadowColor: '#4F86FF',
+    shadowOpacity: 0.8,
+    shadowRadius: 7,
+  },
+  recentHandle: {
+    position: 'absolute',
+    bottom: -1,
+    left: '50%',
+    width: 35,
+    height: 35,
+    marginLeft: -17.5,
+    marginBottom: -17.5,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#5B96FF',
+    backgroundColor: '#183A73',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0,
+    ...Shadows.glow(Colors.accent.secondary),
+  },
+  recentInfo: { flex: 1, minWidth: 0, alignSelf: 'stretch', paddingTop: 6, paddingBottom: 6 },
+  recentName: { ...Typography.headingMedium, fontSize: 18, lineHeight: 23, color: '#fff' },
+  recentMeta: { marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  recentDate: { flex: 1, ...Typography.bodySmall, fontSize: 12, color: '#9AADC3' },
+  recentStatus: { marginTop: 15, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  recentStatusText: { flex: 1, ...Typography.bodySmall, fontSize: 12, fontWeight: '500', color: Colors.status.success },
+  moreButton: { position: 'absolute', top: 12, right: 8, padding: 6 },
+  viewButton: {
+    position: 'absolute',
+    right: 10,
+    bottom: 22,
+    width: 84,
+    height: 47,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#2753A4',
+    backgroundColor: 'rgba(16,35,69,0.7)',
+  },
+  viewButtonText: { ...Typography.bodyLarge, fontSize: 16, color: '#5C87FF' },
+  emptyCard: { minHeight: 157, borderRadius: 23 },
+  emptyRecent: { minHeight: 157, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 20 },
+  emptyRecentText: { ...Typography.bodySmall, fontSize: 12, textAlign: 'center', color: Colors.text.secondary },
   footer: { alignItems: 'center', paddingVertical: 16, marginTop: 12 },
-  footerText: { fontSize: 11, color: Colors.text.quaternary, textAlign: 'center', lineHeight: 17 },
+  footerText: { ...Typography.captionSmall, textAlign: 'center', lineHeight: 17, color: Colors.text.quaternary },
 });

@@ -6,36 +6,68 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, Alert, Switch } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { hapticImpact, hapticSelection } from '../../src/services/preferences';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/theme';
 import { GlassCard } from '../../src/components/GlassCard';
 import { AnimatedEntry, FadeIn } from '../../src/components/AnimatedEntry';
+import { PreferenceSwitchRow } from '../../src/components/PreferenceSwitchRow';
 import { getMe, signOut, UserPublic, PROFESSIONAL_ROLE_LABELS } from '../../src/services/auth';
 import { useAuth } from '../../src/services/AuthContext';
 import { getScanCount } from '../../src/services/scanHistory';
+import {
+  AppPreferences,
+  DEFAULT_PREFERENCES,
+  getPreferences,
+  updatePreferences,
+} from '../../src/services/preferences';
 
 export default function ProfileTab() {
   const router = useRouter();
   const { setLoggedIn } = useAuth();
   const [user, setUser] = useState<UserPublic | null>(null);
   const [scanCount, setScanCount] = useState(0);
+  const [preferences, setPreferences] = useState<AppPreferences>(DEFAULT_PREFERENCES);
+  const [savingPreference, setSavingPreference] = useState<keyof AppPreferences | null>(null);
 
   useEffect(() => {
     getMe().then(setUser).catch(() => {});
-    getScanCount().then(setScanCount);
+    getScanCount().then(setScanCount).catch(() => setScanCount(0));
+    getPreferences().then(setPreferences);
   }, []);
 
+  const togglePreference = async (key: keyof AppPreferences) => {
+    if (savingPreference) return;
+
+    const nextValue = !preferences[key];
+    setPreferences((current) => ({ ...current, [key]: nextValue }));
+    setSavingPreference(key);
+    try {
+      const saved = await updatePreferences({ [key]: nextValue });
+      setPreferences(saved);
+    } catch {
+      setPreferences((current) => ({ ...current, [key]: !nextValue }));
+      Alert.alert('Could not save setting', 'Please try again.');
+    } finally {
+      setSavingPreference(null);
+    }
+  };
+
   const handleLogout = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    hapticImpact('heavy');
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(); setLoggedIn(false); router.replace('/welcome'); } },
     ]);
+  };
+
+  const showInfo = (title: string, message: string) => {
+    hapticSelection();
+    Alert.alert(title, message, [{ text: 'Done', style: 'default' }]);
   };
 
   const roleLabel = user?.profile_type
@@ -98,17 +130,62 @@ export default function ProfileTab() {
           <AnimatedEntry delay={500} duration={500}>
             <Text style={s.secTitle}>Preferences</Text>
             <GlassCard glowColor="cyan">
-              <SettingsRow icon="hand-left-outline" label="Haptic Feedback" value="On" />
+              <PreferenceSwitchRow
+                icon="hand-left-outline"
+                label="Haptic Feedback"
+                description="Vibrate on taps and scan actions"
+                value={preferences.hapticsEnabled}
+                disabled={savingPreference === 'hapticsEnabled'}
+                onValueChange={() => togglePreference('hapticsEnabled')}
+              />
+              <View style={s.divider} />
+              <PreferenceSwitchRow
+                icon="notifications-outline"
+                label="Notifications"
+                description="Allow completion and account updates"
+                value={preferences.notificationsEnabled}
+                disabled={savingPreference === 'notificationsEnabled'}
+                onValueChange={() => togglePreference('notificationsEnabled')}
+              />
+            </GlassCard>
+          </AnimatedEntry>
+
+          {/* Settings */}
+          <AnimatedEntry delay={620} duration={500}>
+            <Text style={s.secTitle}>Settings</Text>
+            <GlassCard glowColor="blue">
+              <SettingsRow
+                icon="lock-closed-outline"
+                label="Privacy & Security"
+                value="Protected"
+                onPress={() => showInfo('Privacy & Security', 'Your authentication token is stored securely on this device. Scan history remains available locally for offline review.')}
+              />
+              <View style={s.divider} />
+              <SettingsRow
+                icon="help-circle-outline"
+                label="Help & Support"
+                value="Contact support"
+                onPress={() => showInfo('Help & Support', 'For help with uploads, denoising results, or account access, contact your Denoise X administrator.')}
+              />
             </GlassCard>
           </AnimatedEntry>
 
           {/* About */}
-          <AnimatedEntry delay={650} duration={500}>
-            <Text style={s.secTitle}>About</Text>
+          <AnimatedEntry delay={740} duration={500}>
+            <Text style={s.secTitle}>About this app</Text>
             <GlassCard>
               <SettingsRow icon="information-circle-outline" label="App Version" value="1.0.0" />
               <View style={s.divider} />
               <SettingsRow icon="code-slash-outline" label="AI Model" value="Noise2Noise U-Net" />
+              <View style={s.divider} />
+              <SettingsRow icon="medical-outline" label="Purpose" value="Clinical support" />
+              <View style={s.divider} />
+              <SettingsRow
+                icon="document-text-outline"
+                label="Disclaimer"
+                value="Read details"
+                onPress={() => showInfo('Clinical Disclaimer', 'Denoise X provides supplementary clinical decision support only. Always consult a qualified healthcare provider.')}
+              />
             </GlassCard>
           </AnimatedEntry>
 
@@ -129,15 +206,39 @@ export default function ProfileTab() {
   );
 }
 
-function SettingsRow({ icon, label, value }: { icon: string; label: string; value: string }) {
-  return (
+function SettingsRow({
+  icon,
+  label,
+  value,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  onPress?: () => void;
+}) {
+  const content = (
     <View style={s.settingsRow}>
       <View style={s.settingsIconWrap}>
         <Ionicons name={icon as any} size={18} color={Colors.text.tertiary} />
       </View>
       <Text style={s.settingsLabel}>{label}</Text>
       <Text style={s.settingsValue} numberOfLines={1}>{value}</Text>
+      {onPress ? <Ionicons name="chevron-forward" size={16} color={Colors.text.quaternary} /> : null}
     </View>
+  );
+
+  if (!onPress) return content;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}`}
+      onPress={onPress}
+      style={({ pressed }) => [pressed && s.settingsRowPressed]}
+    >
+      {content}
+    </Pressable>
   );
 }
 
@@ -161,6 +262,7 @@ const s = StyleSheet.create({
   statDivider: { width: 1, height: 30, backgroundColor: Colors.border.subtle },
   secTitle: { fontSize: 10, fontWeight: '700', color: Colors.text.tertiary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
   settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  settingsRowPressed: { opacity: 0.68 },
   settingsIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(148,163,184,0.06)', alignItems: 'center', justifyContent: 'center' },
   settingsLabel: { fontSize: 14, color: Colors.text.secondary, flex: 1 },
   settingsValue: { fontSize: 13, fontWeight: '600', color: Colors.text.primary, maxWidth: 160, textAlign: 'right' },

@@ -10,7 +10,7 @@ import { StyleSheet, View, Text, ScrollView, Pressable, RefreshControl, Alert } 
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { hapticImpact, hapticNotification, hapticSelection } from '../../src/services/preferences';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/theme';
 import { GlassCard } from '../../src/components/GlassCard';
 import { AnimatedEntry, FadeIn } from '../../src/components/AnimatedEntry';
@@ -26,25 +26,25 @@ export default function HistoryTab() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticImpact('light');
     await loadHistory();
     setRefreshing(false);
   }, [loadHistory]);
 
   const handleDelete = (id: string, fileName: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact('medium');
     Alert.alert('Delete Scan', `Remove "${fileName}" from history?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteScanRecord(id); await loadHistory(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } },
+      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteScanRecord(id); await loadHistory(); hapticNotification('success'); } },
     ]);
   };
 
   const handleClearAll = () => {
     if (scans.length === 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    hapticImpact('heavy');
     Alert.alert('Clear All History', 'This will remove all scan records. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear All', style: 'destructive', onPress: async () => { await clearScanHistory(); setScans([]); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } },
+      { text: 'Clear All', style: 'destructive', onPress: async () => { await clearScanHistory(); setScans([]); hapticNotification('success'); } },
     ]);
   };
 
@@ -95,7 +95,7 @@ export default function HistoryTab() {
               {dateScans.map((scan) => {
                 const isExp = expandedId === scan.id;
                 return (
-                  <Pressable key={scan.id} onPress={() => { Haptics.selectionAsync(); setExpandedId(isExp ? null : scan.id); }}>
+                  <Pressable key={scan.id} onPress={() => { hapticSelection(); setExpandedId(isExp ? null : scan.id); }}>
                     <GlassCard style={s.scanCard} glowColor="blue">
                       <View style={s.scanRow}>
                         <View style={[s.scanThumb, { backgroundColor: scan.was_bypassed ? Colors.accent.secondaryDim : Colors.accent.primaryDim }]}>

@@ -14,10 +14,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { File, Paths } from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
+import { hapticImpact, hapticNotification, hapticSelection } from '../src/services/preferences';
 import { Colors, Typography, Spacing, BorderRadius } from '../src/theme';
 import { GlassCard } from '../src/components/GlassCard';
 import ImageViewer from 'react-native-image-zoom-viewer';
@@ -116,16 +116,16 @@ export default function ResultsScreen() {
         });
       } catch { /* non-critical */ }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      hapticNotification('success');
     } catch (e: any) {
       setError(e.message || 'Processing failed');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      hapticNotification('error');
     } finally {
       setLoading(false);
     }
   }
 
-  function switchMode(m: ViewMode) { Haptics.selectionAsync(); setViewMode(m); }
+  function switchMode(m: ViewMode) { hapticSelection(); setViewMode(m); }
 
   const curFile = files[viewMode];
 
@@ -142,7 +142,7 @@ export default function ResultsScreen() {
       }
       const asset = await MediaLibrary.createAssetAsync(curFile);
       await MediaLibrary.createAlbumAsync('Denoise X', asset, false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      hapticNotification('success');
       Alert.alert('Saved ✓', `${MODE_META[viewMode].label} saved to "Denoise X" album.`);
     } catch (e: any) {
       Alert.alert('Save Failed', e.message);
@@ -221,7 +221,7 @@ export default function ResultsScreen() {
           {/* ── Image preview ──────────────────────────────────────────── */}
           <AnimatedEntry delay={200} duration={500}>
             <Pressable
-              onPress={() => { if (curFile) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFullScreen(true); }}}
+onPress={() => { if (curFile) { hapticImpact('light'); setFullScreen(true); }}}
               style={s.imgBox}
             >
               {curFile ? (
@@ -339,7 +339,7 @@ export default function ResultsScreen() {
                 <Text style={s.modalTitle}>{MODE_META[viewMode].label}</Text>
                 {result && <Text style={s.modalSub}>{result.width}×{result.height}</Text>}
               </View>
-              <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFullScreen(false); }} style={s.modalClose}>
+              <Pressable onPress={() => { hapticImpact('light'); setFullScreen(false); }} style={s.modalClose}>
                 <Ionicons name="close" size={28} color="#fff" />
               </Pressable>
             </View>

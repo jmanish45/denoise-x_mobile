@@ -6,12 +6,12 @@
 
 import React, { useState, useRef } from 'react';
 import { StyleSheet, View, Text, Pressable, Dimensions } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { hapticImpact, hapticSelection } from '../src/services/preferences';
 import { Colors, Typography, Spacing, BorderRadius } from '../src/theme';
 import { GradientButton } from '../src/components/GradientButton';
 import { FadeIn, AnimatedEntry } from '../src/components/AnimatedEntry';
@@ -51,7 +51,7 @@ export default function CameraScreen() {
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    hapticImpact('heavy');
     const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
     if (photo) {
       router.push({ pathname: '/results', params: { imageUri: photo.uri, fileName: 'capture.jpg' } });
@@ -69,7 +69,7 @@ export default function CameraScreen() {
             <View style={styles.topCenter}>
               <Text style={styles.cameraLabel}>X-Ray Capture</Text>
             </View>
-            <Pressable onPress={() => { Haptics.selectionAsync(); setFlashEnabled(!flashEnabled); }} style={styles.controlBtn}>
+            <Pressable onPress={() => { hapticSelection(); setFlashEnabled(!flashEnabled); }} style={styles.controlBtn}>
               <Ionicons name={flashEnabled ? 'flash' : 'flash-off'} size={24} color={flashEnabled ? Colors.accent.primary : '#fff'} />
             </Pressable>
           </FadeIn>
@@ -86,7 +86,7 @@ export default function CameraScreen() {
         <Text style={styles.hint}>Align X-Ray within the frame</Text>
 
         <AnimatedEntry delay={300} duration={600} style={styles.bottomBar}>
-          <Pressable onPress={() => { Haptics.selectionAsync(); setFacing(facing === 'back' ? 'front' : 'back'); }} style={styles.sideBtn}>
+          <Pressable onPress={() => { hapticSelection(); setFacing(facing === 'back' ? 'front' : 'back'); }} style={styles.sideBtn}>
             <Ionicons name="camera-reverse-outline" size={28} color="#fff" />
           </Pressable>
           <Pressable onPress={handleCapture} style={styles.captureOuter}>

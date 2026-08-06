@@ -11,8 +11,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { hapticImpact } from '../../src/services/preferences';
 import { Colors, Typography, Spacing, BorderRadius } from '../../src/theme';
 import { GlassCard } from '../../src/components/GlassCard';
 import { AnimatedEntry, FadeIn } from '../../src/components/AnimatedEntry';
@@ -42,9 +42,9 @@ export default function DenoiseTab() {
   const gS = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.35] });
   const gO = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.4] });
 
-  const handleCamera = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); router.push('/camera'); };
+const handleCamera = () => { hapticImpact('heavy'); router.push('/camera'); };
   const handleGallery = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    hapticImpact('medium');
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
     const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
